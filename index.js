@@ -26,38 +26,6 @@ async function run() {
   try {
     await client.connect();
     console.log("Successfully connected to MongoDB!");
-
-    // Access the database and collections
-    const database = client.db("visaNavigator");
-    const usersCollection = database.collection("users");
-
-    // API Route to test MongoDB connection
-    app.get("/", (req, res) => {
-      res.send("Hello from Visa Navigator server!");
-    });
-
-    // Example: Add a new user (POST request)
-    app.post("/add-user", async (req, res) => {
-      try {
-        const newUser = req.body; // Get user data from request body
-        const result = await usersCollection.insertOne(newUser);
-        res.status(201).send(result);
-      } catch (error) {
-        console.error("Error adding user:", error);
-        res.status(500).send("Failed to add user");
-      }
-    });
-
-    // Example: Fetch all users (GET request)
-    app.get("/users", async (req, res) => {
-      try {
-        const users = await usersCollection.find().toArray();
-        res.status(200).send(users);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        res.status(500).send("Failed to fetch users");
-      }
-    });
   } catch (error) {
     console.error("Error connecting to MongoDB:", error);
   }
