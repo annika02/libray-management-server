@@ -37,6 +37,79 @@ async function run() {
     const applicationsCollection = client
       .db("visaNav")
       .collection("applications");
+
+    // Get All Users
+    app.get("/users", async (req, res) => {
+      const users = await usersCollection.find().toArray();
+      const user = await usersCollection.findOne({ email });
+      res.json(user);
+    });
+
+    // Get All Visas
+    app.get("/all-visas", async (req, res) => {
+      const visas = await visasCollection.find().toArray();
+      res.json(visas);
+    });
+
+    // Add a New Visa
+    app.post("/add-visa", async (req, res) => {
+      const visa = req.body;
+      visa.createdAt = new Date();
+      const result = await visasCollection.insertOne(visa);
+      res.json(result);
+    });
+
+    // Get Visa by ID
+    app.get("/visa/:id", async (req, res) => {
+      const id = req.params.id;
+      const visa = await visasCollection.findOne({ _id: new ObjectId(id) });
+      res.json(visa);
+    });
+
+    // Update Visa
+    app.patch("/visa/:id", async (req, res) => {
+      const id = req.params.id;
+      const updateData = req.body;
+      const result = await visasCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData }
+      );
+      res.json(result);
+    });
+
+    // Delete Visa
+    app.delete("/visa/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await visasCollection.deleteOne({ _id: new ObjectId(id) });
+      res.json(result);
+    });
+
+    // Apply for a Visa
+    app.post("/apply", async (req, res) => {
+      const application = req.body;
+      application.appliedAt = new Date();
+      application.status = "Pending";
+      const result = await applicationsCollection.insertOne(application);
+      res.json(result);
+    });
+
+    // Get All Applications for a User
+    app.get("/applications/:email", async (req, res) => {
+      const email = req.params.email;
+      const applications = await applicationsCollection
+        .find({ email })
+        .toArray();
+      res.json(applications);
+    });
+
+    // Cancel Visa Application
+    app.delete("/application/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await applicationsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.json(result);
+    });
   } finally {
     // await client.close();
   }
