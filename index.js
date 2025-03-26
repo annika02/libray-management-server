@@ -1,7 +1,7 @@
 require("dotenv").config(); // Ensure environment variables are loaded
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -45,9 +45,44 @@ async function run() {
       res.json(user);
     });
 
+    // Register User
+    app.post("/register", async (req, res) => {
+      const { name, email, photoURL } = req.body;
+      const existingUser = await usersCollection.findOne({ email });
+      if (existingUser)
+        return res.status(400).json({ message: "User already exists" });
+
+      const newUser = { name, email, photoURL, createdAt: new Date() };
+      const result = await usersCollection.insertOne(newUser);
+      res.json(result);
+    });
+
+    // Get User by Email
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({ email });
+      res.json(user);
+    });
+
     // Get All Visas
     app.get("/all-visas", async (req, res) => {
       const visas = await visasCollection.find().toArray();
+      res.json(visas);
+    });
+
+    app.get("/latest-visas", async (req, res) => {
+      const latestVisas = await visasCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .toArray();
+      res.json(latestVisas);
+    });
+
+    // Get visas added by the logged-in user
+    app.get("/my-visas/:email", async (req, res) => {
+      const email = req.params.email;
+      const visas = await visasCollection.find({ createdBy: email }).toArray();
       res.json(visas);
     });
 
@@ -96,10 +131,14 @@ async function run() {
     // Get All Applications for a User
     app.get("/applications/:email", async (req, res) => {
       const email = req.params.email;
-      const applications = await applicationsCollection
-        .find({ email })
-        .toArray();
-      res.json(applications);
+      try {
+        const applications = await applicationsCollection
+          .find({ email })
+          .toArray();
+        res.json(applications);
+      } catch (error) {
+        res.status(500).json({ error: "Failed to fetch applications" });
+      }
     });
 
     // Cancel Visa Application
