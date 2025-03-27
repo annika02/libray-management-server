@@ -122,6 +122,9 @@ async function run() {
     // Apply for a Visa
     app.post("/apply", async (req, res) => {
       const application = req.body;
+      if (!application.email) {
+        return res.status(400).json({ error: "User email is required" });
+      }
       application.appliedAt = new Date();
       application.status = "Pending";
       const result = await applicationsCollection.insertOne(application);
