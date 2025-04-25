@@ -160,6 +160,4 @@ async function run() {
 run().catch(console.dir);
 
 // Start Express server
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+module.exports = app;
