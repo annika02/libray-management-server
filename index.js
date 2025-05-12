@@ -1,12 +1,11 @@
+require("dotenv").config();
 const express = require("express");
 const { MongoClient } = require("mongodb");
 
 const app = express();
 const port = 3000;
 
-// Paste your Atlas connection string here
-const uri =
-  "mongodb+srv://Anika:PowerPuffgirls@cluster0.dj2abpe.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.dj2abpe.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 const client = new MongoClient(uri);
 
