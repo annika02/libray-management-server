@@ -256,7 +256,7 @@ async function run() {
 
       const query = { _id: new ObjectId(id) };
 
-      // Update the book details
+      // Update the book details in AllBooks
       const updateDoc = {
         $set: {
           image,
@@ -267,6 +267,26 @@ async function run() {
         },
       };
       const result = await AllBooks.updateOne(query, updateDoc);
+      console.log(`Updated in AllBooks:`, result);
+
+      // Update the corresponding category collection
+      const normalizedCategory = normalizeCategory(category);
+      const CategoryCollection = categoryToCollection[normalizedCategory];
+      if (CategoryCollection) {
+        const categoryResult = await CategoryCollection.updateOne(
+          query,
+          updateDoc
+        );
+        console.log(
+          `Updated in ${normalizedCategory} collection:`,
+          categoryResult
+        );
+      } else {
+        console.error(
+          `No collection found for category: ${normalizedCategory}`
+        );
+      }
+
       res.send(result);
     });
 
