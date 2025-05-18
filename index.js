@@ -18,7 +18,7 @@ app.use(
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // Allow cookies if needed
+    credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204,
   })
@@ -157,9 +157,31 @@ async function run() {
       }
 
       const query = { _id: new ObjectId(id) };
-      const update = { $inc: { quantity: -1 } };
-
       try {
+        const book = await collection.findOne(query);
+        if (!book) {
+          return res.status(404).send({ error: "Book not found" });
+        }
+        // Ensure quantity is a number
+        let currentQuantity = book.quantity;
+        if (typeof currentQuantity === "string") {
+          currentQuantity = parseInt(currentQuantity) || 0;
+          await collection.updateOne(query, {
+            $set: { quantity: currentQuantity },
+          });
+        } else if (
+          !book.hasOwnProperty("quantity") ||
+          typeof currentQuantity !== "number"
+        ) {
+          await collection.updateOne(query, { $set: { quantity: 0 } });
+          currentQuantity = 0;
+        }
+
+        if (currentQuantity <= 0) {
+          return res.status(400).send({ error: "Book out of stock" });
+        }
+
+        const update = { $inc: { quantity: -1 } };
         const result = await collection.updateOne(query, update);
         if (result.modifiedCount > 0) {
           res
@@ -172,13 +194,18 @@ async function run() {
         }
       } catch (error) {
         console.error("Patch /borrow error:", error);
-        res.status(500).send({ error: "Failed to update book quantity" });
+        res
+          .status(500)
+          .send({
+            error: "Failed to update book quantity",
+            details: error.message,
+          });
       }
     });
 
     app.patch("/:category/:id/return", async (req, res) => {
       const { category, id } = req.params;
-      console.log(category, id);
+      console.log("Return request:", { category, id });
       const collections = {
         fiction: FictionCollection,
         science: ScienceCollection,
@@ -193,9 +220,24 @@ async function run() {
       }
 
       const query = { _id: new ObjectId(id) };
-      const update = { $inc: { quantity: 1 } };
-
       try {
+        const book = await collection.findOne(query);
+        if (!book) {
+          return res.status(404).send({ error: "Book not found" });
+        }
+        // Convert quantity to number if it's a string
+        if (typeof book.quantity === "string") {
+          await collection.updateOne(query, {
+            $set: { quantity: parseInt(book.quantity) || 0 },
+          });
+        } else if (
+          !book.hasOwnProperty("quantity") ||
+          typeof book.quantity !== "number"
+        ) {
+          await collection.updateOne(query, { $set: { quantity: 0 } });
+        }
+
+        const update = { $inc: { quantity: 1 } };
         const result = await collection.updateOne(query, update);
         if (result.modifiedCount > 0) {
           res
@@ -208,23 +250,31 @@ async function run() {
         }
       } catch (error) {
         console.error("Patch /return error:", error);
-        res.status(500).send({ error: "Failed to update book quantity" });
+        res
+          .status(500)
+          .send({
+            error: "Failed to update book quantity",
+            details: error.message,
+          });
       }
     });
 
     app.post("/borrow", async (req, res) => {
       const borrowedBooks = req.body;
-      // Ensure details is included or provide a fallback
+      console.log("Received borrow data:", borrowedBooks); // Debug log
       const bookToInsert = {
         ...borrowedBooks,
         details: borrowedBooks.details || "No details available",
+        quantity: Number(borrowedBooks.quantity) || 0, // Ensure quantity is a number
       };
       try {
         const result = await BorrowedBookss.insertOne(bookToInsert);
         res.status(201).send(result);
       } catch (error) {
         console.error("Post /borrow error:", error);
-        res.status(500).send({ error: "Failed to borrow book" });
+        res
+          .status(500)
+          .send({ error: "Failed to borrow book", details: error.message });
       }
     });
 
@@ -235,7 +285,7 @@ async function run() {
 
     app.get("/borrow/:id", async (req, res) => {
       const id = req.params.id;
-      const query = { _id: id }; // Use string _id as per your setup
+      const query = { _id: id };
       try {
         const result = await BorrowedBookss.findOne(query);
         if (result) {
@@ -267,7 +317,7 @@ async function run() {
 
     app.put("/allbooks/:id", async (req, res) => {
       const { id } = req.params;
-      const { image, name, author, category, rating } = req.body;
+      const { image, name, author, category, rating, quantity } = req.body;
 
       if (!image || !name || !author || !category || !rating) {
         return res.status(400).send({ error: "All fields are required" });
@@ -282,6 +332,7 @@ async function run() {
           author,
           category,
           rating,
+          quantity: Number(quantity) || 0, // Ensure quantity is a number
         },
       };
       try {
@@ -315,13 +366,19 @@ async function run() {
       const myaddedBooks = req.body;
       const category = normalizeCategory(myaddedBooks.category);
 
-      const result = await AllBooks.insertOne(myaddedBooks);
+      const bookToInsert = {
+        ...myaddedBooks,
+        quantity: Number(myaddedBooks.quantity) || 0, // Ensure quantity is a number
+        details: myaddedBooks.details || "No details available",
+      };
+
+      const result = await AllBooks.insertOne(bookToInsert);
       console.log(`Added to AllBooks:`, result.insertedId);
 
       const CategoryCollection = categoryToCollection[category];
       if (CategoryCollection) {
         const categoryResult = await CategoryCollection.insertOne({
-          ...myaddedBooks,
+          ...bookToInsert,
           _id: result.insertedId,
         });
         console.log(
