@@ -8,7 +8,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
+// Enhanced CORS Middleware
 app.use(
   cors({
     origin: [
@@ -18,10 +18,20 @@ app.use(
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true, // Allow cookies if needed
     preflightContinue: false,
     optionsSuccessStatus: 204,
   })
 );
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE");
+  res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 app.use(express.json());
 app.use(bodyParser.json());
 
@@ -161,6 +171,7 @@ async function run() {
             .send({ error: "Book not found or already out of stock" });
         }
       } catch (error) {
+        console.error("Patch /borrow error:", error);
         res.status(500).send({ error: "Failed to update book quantity" });
       }
     });
@@ -196,14 +207,25 @@ async function run() {
             .send({ error: "Book not found or already out of stock" });
         }
       } catch (error) {
+        console.error("Patch /return error:", error);
         res.status(500).send({ error: "Failed to update book quantity" });
       }
     });
 
     app.post("/borrow", async (req, res) => {
       const borrowedBooks = req.body;
-      const result = await BorrowedBookss.insertOne(borrowedBooks);
-      res.send(result);
+      // Ensure details is included or provide a fallback
+      const bookToInsert = {
+        ...borrowedBooks,
+        details: borrowedBooks.details || "No details available",
+      };
+      try {
+        const result = await BorrowedBookss.insertOne(bookToInsert);
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Post /borrow error:", error);
+        res.status(500).send({ error: "Failed to borrow book" });
+      }
     });
 
     app.get("/borrow", async (req, res) => {
@@ -213,10 +235,7 @@ async function run() {
 
     app.get("/borrow/:id", async (req, res) => {
       const id = req.params.id;
-
-      // Query using the string _id directly
-      const query = { _id: id };
-
+      const query = { _id: id }; // Use string _id as per your setup
       try {
         const result = await BorrowedBookss.findOne(query);
         if (result) {
@@ -225,7 +244,7 @@ async function run() {
           res.status(404).send({ message: "Borrowed item not found" });
         }
       } catch (error) {
-        console.error(error);
+        console.error("Get /borrow/:id error:", error);
         res.status(500).send({ message: "Failed to retrieve borrowed item" });
       }
     });
@@ -241,7 +260,7 @@ async function run() {
           res.status(404).send({ message: "Book not found" });
         }
       } catch (error) {
-        console.error("Error deleting the book:", error);
+        console.error("Delete /borrow/:id error:", error);
         res.status(500).send({ message: "Failed to delete the book" });
       }
     });
@@ -256,7 +275,6 @@ async function run() {
 
       const query = { _id: new ObjectId(id) };
 
-      // Update the book details in AllBooks
       const updateDoc = {
         $set: {
           image,
@@ -266,44 +284,45 @@ async function run() {
           rating,
         },
       };
-      const result = await AllBooks.updateOne(query, updateDoc);
-      console.log(`Updated in AllBooks:`, result);
+      try {
+        const result = await AllBooks.updateOne(query, updateDoc);
+        console.log(`Updated in AllBooks:`, result);
 
-      // Update the corresponding category collection
-      const normalizedCategory = normalizeCategory(category);
-      const CategoryCollection = categoryToCollection[normalizedCategory];
-      if (CategoryCollection) {
-        const categoryResult = await CategoryCollection.updateOne(
-          query,
-          updateDoc
-        );
-        console.log(
-          `Updated in ${normalizedCategory} collection:`,
-          categoryResult
-        );
-      } else {
-        console.error(
-          `No collection found for category: ${normalizedCategory}`
-        );
+        const normalizedCategory = normalizeCategory(category);
+        const CategoryCollection = categoryToCollection[normalizedCategory];
+        if (CategoryCollection) {
+          const categoryResult = await CategoryCollection.updateOne(
+            query,
+            updateDoc
+          );
+          console.log(
+            `Updated in ${normalizedCategory} collection:`,
+            categoryResult
+          );
+        } else {
+          console.error(
+            `No collection found for category: ${normalizedCategory}`
+          );
+        }
+        res.send(result);
+      } catch (error) {
+        console.error("Put /allbooks/:id error:", error);
+        res.status(500).send({ error: "Failed to update book" });
       }
-
-      res.send(result);
     });
 
     app.post("/allbooks", async (req, res) => {
       const myaddedBooks = req.body;
       const category = normalizeCategory(myaddedBooks.category);
 
-      // Insert into AllBooks
       const result = await AllBooks.insertOne(myaddedBooks);
       console.log(`Added to AllBooks:`, result.insertedId);
 
-      // Insert into the corresponding category collection
       const CategoryCollection = categoryToCollection[category];
       if (CategoryCollection) {
         const categoryResult = await CategoryCollection.insertOne({
           ...myaddedBooks,
-          _id: result.insertedId, // Ensure the _id matches
+          _id: result.insertedId,
         });
         console.log(
           `Added to ${category} collection:`,
@@ -323,7 +342,7 @@ async function run() {
       console.log(`Library server running on port ${port}`);
     });
   } catch (error) {
-    console.error(error);
+    console.error("Server startup error:", error);
   }
 }
 
