@@ -9,35 +9,63 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Enhanced CORS Middleware
+const allowedOrigins = [
+  "https://assignment-11-e2b7f.web.app",
+  "https://assignment-11-e2b7f.firebaseapp.com",
+  "http://localhost:5173",
+];
 app.use(
   cors({
-    origin: [
-      "https://assignment-11-e2b7f.web.app",
-      "assignment-11-e2b7f.firebaseapp.com",
-      "http://localhost:5173",
-    ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    origin: (origin, callback) => {
+      console.log("CORS Origin:", origin);
+      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204,
   })
 );
+
+// Middleware to normalize URLs and log requests
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE");
+  req.url = req.url.replace(/\/+/g, "/");
+  res.header(
+    "Access-Control-Allow-Origin",
+    req.headers.origin || allowedOrigins[0]
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
   res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
   if (req.method === "OPTIONS") {
+    console.log("Handling OPTIONS preflight for:", req.url);
     return res.sendStatus(204);
   }
+  console.log(`Request: ${req.method} ${req.url}`);
   next();
 });
+
+// Prevent redirects
+app.use((req, res, next) => {
+  res.redirect = (status, url) => {
+    console.log(`Blocked redirect to ${url} with status ${status}`);
+    res.status(status).send({ error: "Redirects are disabled" });
+  };
+  next();
+});
+
 app.use(express.json());
 app.use(bodyParser.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.dj2abpe.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-// MongoDB Client
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -48,7 +76,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Define Collections
     const Books = client.db("Fiction");
     const FictionCollection = Books.collection("Fiction_Books");
     const ScienceCollection = Books.collection("Science_Books");
@@ -57,7 +84,6 @@ async function run() {
     const BorrowedBookss = Books.collection("BorrowedBooks");
     const AllBooks = Books.collection("AllBooks");
 
-    // Category mapping to match collection names
     const categoryToCollection = {
       fiction: FictionCollection,
       science: ScienceCollection,
@@ -66,7 +92,6 @@ async function run() {
       nonfiction: NonFictionCollection,
     };
 
-    // Normalize category to match backend routes
     const normalizeCategory = (category) => {
       if (!category) return "fiction";
       const normalized = category.toLowerCase().replace(/\s|-/g, "");
@@ -75,74 +100,85 @@ async function run() {
         : "fiction";
     };
 
-    // Routes
     app.get("/", async (req, res) => {
+      console.log("Root endpoint hit");
       res.send("Server running successfully!");
     });
 
     app.get("/fiction", async (req, res) => {
+      console.log("Fetching fiction books");
       const booksColl = await FictionCollection.find().toArray();
       res.send(booksColl);
     });
 
     app.get("/fiction/:id", async (req, res) => {
+      console.log(`Fetching fiction book with id: ${req.params.id}`);
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await FictionCollection.findOne(query);
-      res.send(result);
+      res.send(result || { error: "Book not found" });
     });
 
     app.get("/science", async (req, res) => {
+      console.log("Fetching science books");
       const booksColl = await ScienceCollection.find().toArray();
       res.send(booksColl);
     });
 
     app.get("/science/:id", async (req, res) => {
+      console.log(`Fetching science book with id: ${req.params.id}`);
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await ScienceCollection.findOne(query);
-      res.send(result);
+      res.send(result || { error: "Book not found" });
     });
 
     app.get("/history", async (req, res) => {
+      console.log("Fetching history books");
       const booksColl = await HistoryCollection.find().toArray();
       res.send(booksColl);
     });
 
     app.get("/history/:id", async (req, res) => {
+      console.log(`Fetching history book with id: ${req.params.id}`);
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await HistoryCollection.findOne(query);
-      res.send(result);
+      res.send(result || { error: "Book not found" });
     });
 
     app.get("/nonfiction", async (req, res) => {
+      console.log("Fetching nonfiction books");
       const booksColl = await NonFictionCollection.find().toArray();
       res.send(booksColl);
     });
 
-    app.get("/non-fiction/:id", async (req, res) => {
+    app.get("/nonfiction/:id", async (req, res) => {
+      console.log(`Fetching nonfiction book with id: ${req.params.id}`);
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await NonFictionCollection.findOne(query);
-      res.send(result);
+      res.send(result || { error: "Book not found" });
     });
 
     app.get("/allbooks", async (req, res) => {
+      console.log("Fetching all books");
       const allbooks = await AllBooks.find().toArray();
       res.send(allbooks);
     });
 
     app.get("/allbooks/:id", async (req, res) => {
+      console.log(`Fetching all book with id: ${req.params.id}`);
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await AllBooks.findOne(query);
-      res.send(result);
+      res.send(result || { error: "Book not found" });
     });
 
-    // PATCH endpoint to decrement book quantity
     app.patch("/:category/:id/borrow", async (req, res) => {
+      console.log(`Borrow request for ${req.params.category}/${req.params.id}`);
       const { category, id } = req.params;
+      const { quantityToBorrow } = req.body;
       const collections = {
         fiction: FictionCollection,
         science: ScienceCollection,
@@ -151,18 +187,14 @@ async function run() {
       };
 
       const collection = collections[category.toLowerCase()];
-
-      if (!collection) {
+      if (!collection)
         return res.status(400).send({ error: "Invalid category" });
-      }
 
       const query = { _id: new ObjectId(id) };
       try {
         const book = await collection.findOne(query);
-        if (!book) {
-          return res.status(404).send({ error: "Book not found" });
-        }
-        // Ensure quantity is a number
+        if (!book) return res.status(404).send({ error: "Book not found" });
+
         let currentQuantity = book.quantity;
         if (typeof currentQuantity === "string") {
           currentQuantity = parseInt(currentQuantity) || 0;
@@ -177,13 +209,17 @@ async function run() {
           currentQuantity = 0;
         }
 
-        if (currentQuantity <= 0) {
-          return res.status(400).send({ error: "Book out of stock" });
+        const borrowAmount = Number(quantityToBorrow) || 1;
+        if (currentQuantity < borrowAmount) {
+          return res.status(400).send({
+            error: `Only ${currentQuantity} books available to borrow`,
+          });
         }
 
-        const update = { $inc: { quantity: -1 } };
+        const update = { $inc: { quantity: -borrowAmount } };
         const result = await collection.updateOne(query, update);
         if (result.modifiedCount > 0) {
+          await AllBooks.updateOne(query, update);
           res
             .status(200)
             .send({ message: "Book quantity updated successfully" });
@@ -194,18 +230,17 @@ async function run() {
         }
       } catch (error) {
         console.error("Patch /borrow error:", error);
-        res
-          .status(500)
-          .send({
-            error: "Failed to update book quantity",
-            details: error.message,
-          });
+        res.status(500).send({
+          error: "Failed to update book quantity",
+          details: error.message,
+        });
       }
     });
 
     app.patch("/:category/:id/return", async (req, res) => {
+      console.log(`Return request for ${req.params.category}/${req.params.id}`);
       const { category, id } = req.params;
-      console.log("Return request:", { category, id });
+      const { quantityToReturn } = req.body;
       const collections = {
         fiction: FictionCollection,
         science: ScienceCollection,
@@ -214,18 +249,14 @@ async function run() {
       };
 
       const collection = collections[category.toLowerCase()];
-
-      if (!collection) {
+      if (!collection)
         return res.status(400).send({ error: "Invalid category" });
-      }
 
       const query = { _id: new ObjectId(id) };
       try {
         const book = await collection.findOne(query);
-        if (!book) {
-          return res.status(404).send({ error: "Book not found" });
-        }
-        // Convert quantity to number if it's a string
+        if (!book) return res.status(404).send({ error: "Book not found" });
+
         if (typeof book.quantity === "string") {
           await collection.updateOne(query, {
             $set: { quantity: parseInt(book.quantity) || 0 },
@@ -237,35 +268,34 @@ async function run() {
           await collection.updateOne(query, { $set: { quantity: 0 } });
         }
 
-        const update = { $inc: { quantity: 1 } };
+        const returnAmount = Number(quantityToReturn) || 1;
+        const update = { $inc: { quantity: returnAmount } };
         const result = await collection.updateOne(query, update);
         if (result.modifiedCount > 0) {
+          await AllBooks.updateOne(query, update);
           res
             .status(200)
             .send({ message: "Book quantity updated successfully" });
         } else {
-          res
-            .status(404)
-            .send({ error: "Book not found or already out of stock" });
+          res.status(404).send({ error: "Book not found" });
         }
       } catch (error) {
         console.error("Patch /return error:", error);
-        res
-          .status(500)
-          .send({
-            error: "Failed to update book quantity",
-            details: error.message,
-          });
+        res.status(500).send({
+          error: "Failed to update book quantity",
+          details: error.message,
+        });
       }
     });
 
     app.post("/borrow", async (req, res) => {
+      console.log("Borrow post request received");
       const borrowedBooks = req.body;
-      console.log("Received borrow data:", borrowedBooks); // Debug log
       const bookToInsert = {
         ...borrowedBooks,
+        _id: new ObjectId(),
         details: borrowedBooks.details || "No details available",
-        quantity: Number(borrowedBooks.quantity) || 0, // Ensure quantity is a number
+        quantity: Number(borrowedBooks.quantity) || 1,
       };
       try {
         const result = await BorrowedBookss.insertOne(bookToInsert);
@@ -279,13 +309,15 @@ async function run() {
     });
 
     app.get("/borrow", async (req, res) => {
+      console.log("Fetching borrow list");
       const borrowList = await BorrowedBookss.find().toArray();
       res.send(borrowList);
     });
 
     app.get("/borrow/:id", async (req, res) => {
+      console.log(`Fetching borrow item with id: ${req.params.id}`);
       const id = req.params.id;
-      const query = { _id: id };
+      const query = { _id: new ObjectId(id) };
       try {
         const result = await BorrowedBookss.findOne(query);
         if (result) {
@@ -300,10 +332,12 @@ async function run() {
     });
 
     app.delete("/borrow/:id", async (req, res) => {
+      console.log(`Deleting borrow item with id: ${req.params.id}`);
       const { id } = req.params;
-      console.log(id);
       try {
-        const result = await BorrowedBookss.deleteOne({ _id: id });
+        const result = await BorrowedBookss.deleteOne({
+          _id: new ObjectId(id),
+        });
         if (result.deletedCount === 1) {
           res.status(200).send({ message: "Book deleted successfully" });
         } else {
@@ -316,6 +350,7 @@ async function run() {
     });
 
     app.put("/allbooks/:id", async (req, res) => {
+      console.log(`Updating all book with id: ${req.params.id}`);
       const { id } = req.params;
       const { image, name, author, category, rating, quantity } = req.body;
 
@@ -324,7 +359,6 @@ async function run() {
       }
 
       const query = { _id: new ObjectId(id) };
-
       const updateDoc = {
         $set: {
           image,
@@ -332,28 +366,15 @@ async function run() {
           author,
           category,
           rating,
-          quantity: Number(quantity) || 0, // Ensure quantity is a number
+          quantity: Number(quantity) || 0,
         },
       };
       try {
         const result = await AllBooks.updateOne(query, updateDoc);
-        console.log(`Updated in AllBooks:`, result);
-
         const normalizedCategory = normalizeCategory(category);
         const CategoryCollection = categoryToCollection[normalizedCategory];
         if (CategoryCollection) {
-          const categoryResult = await CategoryCollection.updateOne(
-            query,
-            updateDoc
-          );
-          console.log(
-            `Updated in ${normalizedCategory} collection:`,
-            categoryResult
-          );
-        } else {
-          console.error(
-            `No collection found for category: ${normalizedCategory}`
-          );
+          await CategoryCollection.updateOne(query, updateDoc);
         }
         res.send(result);
       } catch (error) {
@@ -363,38 +384,28 @@ async function run() {
     });
 
     app.post("/allbooks", async (req, res) => {
+      console.log("Adding new book");
       const myaddedBooks = req.body;
       const category = normalizeCategory(myaddedBooks.category);
 
       const bookToInsert = {
         ...myaddedBooks,
-        quantity: Number(myaddedBooks.quantity) || 0, // Ensure quantity is a number
+        quantity: Number(myaddedBooks.quantity) || 0,
         details: myaddedBooks.details || "No details available",
       };
 
       const result = await AllBooks.insertOne(bookToInsert);
-      console.log(`Added to AllBooks:`, result.insertedId);
-
       const CategoryCollection = categoryToCollection[category];
       if (CategoryCollection) {
-        const categoryResult = await CategoryCollection.insertOne({
+        await CategoryCollection.insertOne({
           ...bookToInsert,
           _id: result.insertedId,
         });
-        console.log(
-          `Added to ${category} collection:`,
-          categoryResult.insertedId
-        );
-      } else {
-        console.error(`No collection found for category: ${category}`);
       }
-
       res.status(201).send(result);
     });
 
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    console.log("Connected to MongoDB!");
     app.listen(port, () => {
       console.log(`Library server running on port ${port}`);
     });
